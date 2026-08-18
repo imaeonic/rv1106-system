@@ -10,9 +10,9 @@ description = "RDP transport for JetKVM physical console"
 anyhow = "1"
 async-trait = "0.1"
 bytes = "1"
-ironrdp-displaycontrol = "0.8"
-ironrdp-egfx = "0.3"
-ironrdp-server = { version = "0.13", default-features = false, features = ["egfx"] }
+ironrdp-displaycontrol = { git = "https://github.com/Devolutions/IronRDP", rev = "1723385068ee3a4be635c199c752eb2bbd183f1e", package = "ironrdp-displaycontrol" }
+ironrdp-egfx = { git = "https://github.com/Devolutions/IronRDP", rev = "1723385068ee3a4be635c199c752eb2bbd183f1e", package = "ironrdp-egfx" }
+ironrdp-server = { git = "https://github.com/Devolutions/IronRDP", rev = "1723385068ee3a4be635c199c752eb2bbd183f1e", package = "ironrdp-server", default-features = false, features = ["egfx"] }
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

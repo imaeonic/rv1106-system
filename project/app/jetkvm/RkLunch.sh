@@ -11,7 +11,6 @@ rcS()
 
 		case "$i" in
 			*.sh)
-				# Source shell script for speed.
 				(
 					trap - INT QUIT TSTP
 					set start
@@ -19,21 +18,15 @@ rcS()
 				)
 				;;
 			*)
-				# No sh extension, so fork subprocess.
 				$i start
 				;;
 		esac
 	done
 
-  # Also allow for init scripts in userdata
 	for i in /userdata/init.d/S??* ;do
-
-		# Ignore dangling symlinks (if any).
 		[ ! -f "$i" ] && continue
-
 		case "$i" in
 			*.sh)
-				# Source shell script for speed.
 				(
 					trap - INT QUIT TSTP
 					set start
@@ -41,7 +34,6 @@ rcS()
 				)
 				;;
 			*)
-				# No sh extension, so fork subprocess.
 				$i start
 				;;
 		esac
@@ -59,33 +51,37 @@ network_init()
 	ifconfig eth0 down
 	set_up_mac_address | tee /dev/kmsg
 
-	# ethaddr1=`ifconfig -a | grep "eth.*HWaddr" | awk '{print $5}'`
+	ifconfig eth0 up && (
+		hostname=$(hostname 2>/dev/null)
+		if echo "$hostname" | grep -Eq '^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$'; then
+			udhcpc -i eth0 -x hostname:"$hostname"
+		else
+			udhcpc -i eth0
+		fi
+	)
+}
 
-	# if [ -f /data/ethaddr.txt ]; then
-	# 	ethaddr2=`cat /data/ethaddr.txt`
-	# 	if [ $ethaddr1 == $ethaddr2 ]; then
-	# 		echo "eth HWaddr cfg ok"
-	# 	else
-	# 		ifconfig eth0 down
-	# 		ifconfig eth0 hw ether $ethaddr2
-	# 	fi
-	# else
-	# 	echo $ethaddr1 > /data/ethaddr.txt
-	# fi
-  # Check valid hostname and set on dhcp req
-  ifconfig eth0 up && (
-      hostname=$(hostname 2>/dev/null)
-      if echo "$hostname" | grep -Eq '^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$'; then
-          udhcpc -i eth0 -x hostname:"$hostname"
-      else
-          udhcpc -i eth0
-      fi
-  )
+start_rdp_console()
+{
+	RDP_BIN=/userdata/jetkvm/bin/jetkvm-rdp
+	[ ! -x "$RDP_BIN" ] && return 0
+
+	# Keep the transport daemon independent from jetkvm_app. It reconnects to
+	# /run/jetkvm-rdp.sock if the main application is upgraded/restarted.
+	(
+		while true; do
+			JETKVM_RDP_BIND=${JETKVM_RDP_BIND:-0.0.0.0:3389} \
+			JETKVM_RDP_SOCKET=${JETKVM_RDP_SOCKET:-/run/jetkvm-rdp.sock} \
+			RUST_LOG=${RUST_LOG:-info} \
+			"$RDP_BIN" >> /userdata/jetkvm/rdp.log 2>&1
+			echo "jetkvm-rdp exited; restarting in 2 seconds" >> /userdata/jetkvm/rdp.log
+			sleep 2
+		done
+	) &
 }
 
 post_chk()
 {
-	#TODO: ensure /userdata mount done
 	cnt=0
 	while [ $cnt -lt 30 ];
 	do
@@ -96,7 +92,6 @@ post_chk()
 		sleep .1
 	done
 
-	# if ko exist, install ko first
 	default_ko_dir=/ko
 	if [ -f "/oem/usr/ko/insmod_ko.sh" ];then
 		default_ko_dir=/oem/usr/ko
@@ -105,12 +100,10 @@ post_chk()
 		cd $default_ko_dir && sh insmod_ko.sh && cd -
 	fi
 
-	# make busybox depmod happy
 	modules_path="/lib/modules/$(uname -r)"
 	if [ ! -d "/lib/modules" ]; then
 		mkdir -p "/lib/modules"
 	fi
-	# create symlink if modules path does not exist
 	if [ ! -e "$modules_path" ]; then
 		ln -s "$default_ko_dir" "$modules_path"
 	fi
@@ -120,18 +113,16 @@ post_chk()
 		mv -f /userdata/jetkvm/jetkvm_app.update /userdata/jetkvm/bin/jetkvm_app
 	fi
 
-
 	dropbear.sh &
 	chmod +x /userdata/jetkvm/bin/jetkvm_app
 	/userdata/jetkvm/bin/jetkvm_app > /userdata/jetkvm/last.log 2>&1 &
-
+	start_rdp_console
 }
 
 rcS
 
 ulimit -c unlimited
 echo "/data/core-%p-%e" > /proc/sys/kernel/core_pattern
-# echo 0 > /sys/devices/platform/rkcif-mipi-lvds/is_use_dummybuf
 
 echo 1 > /proc/sys/vm/overcommit_memory
 

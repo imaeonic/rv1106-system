@@ -64,14 +64,20 @@ network_init()
 start_rdp_console()
 {
 	RDP_BIN=/userdata/jetkvm/bin/jetkvm-rdp
+	RDP_SOCKET=${JETKVM_RDP_SOCKET:-/run/jetkvm-rdp.sock}
 	[ ! -x "$RDP_BIN" ] && return 0
 
-	# Keep the transport daemon independent from jetkvm_app. It reconnects to
-	# /run/jetkvm-rdp.sock if the main application is upgraded/restarted.
 	(
+		# Do not listen on 3389 until jetkvm_app has initialised the native
+		# HDMI/HID bridge. If jetkvm_app is still booting, MSTSC should see a
+		# closed port rather than connecting to a console that cannot start video.
+		while [ ! -S "$RDP_SOCKET" ]; do
+			sleep .2
+		done
+
 		while true; do
 			JETKVM_RDP_BIND=${JETKVM_RDP_BIND:-0.0.0.0:3389} \
-			JETKVM_RDP_SOCKET=${JETKVM_RDP_SOCKET:-/run/jetkvm-rdp.sock} \
+			JETKVM_RDP_SOCKET="$RDP_SOCKET" \
 			RUST_LOG=${RUST_LOG:-info} \
 			"$RDP_BIN" >> /userdata/jetkvm/rdp.log 2>&1
 			echo "jetkvm-rdp exited; restarting in 2 seconds" >> /userdata/jetkvm/rdp.log

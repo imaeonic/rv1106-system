@@ -12,6 +12,7 @@ CURRENT_DIR := $(shell pwd)
 PKG_NAME := jetkvm
 PKG_BIN ?= out
 PKG_BUILD ?= build
+JETKVM_RDP_BIN ?= $(CURRENT_DIR)/rdp-console/target/armv7-unknown-linux-gnueabihf/release/jetkvm-rdp
 
 ifeq ($(PKG_BIN),)
 $(error ### $(CURRENT_DIR): PKG_BIN is NULL, Please Check !!!)
@@ -35,6 +36,12 @@ jetkvm-build:
 	cp $(CURRENT_DIR)/dropbear.sh $(PKG_BIN)/bin/dropbear.sh
 	cp $(CURRENT_DIR)/fb_init $(PKG_BIN)/share/fb_init
 	cp -rfa $(CURRENT_DIR)/jetkvm $(PKG_BIN)/install_to_userdata
+	@if [ -f "$(JETKVM_RDP_BIN)" ]; then \
+		echo "[INSTALL] JetKVM RDP daemon: $(JETKVM_RDP_BIN)"; \
+		install -m 0755 "$(JETKVM_RDP_BIN)" $(PKG_BIN)/install_to_userdata/jetkvm/bin/jetkvm-rdp; \
+	else \
+		echo "[INFO] JetKVM RDP daemon not supplied; firmware will retain normal web-only behaviour"; \
+	fi
 	$(call MAROC_COPY_PKG_TO_APP_OUTPUT, $(RK_APP_OUTPUT), $(PKG_BIN))
 
 clean:

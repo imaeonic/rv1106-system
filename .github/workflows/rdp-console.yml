@@ -1,0 +1,52 @@
+name: RDP Console
+
+on:
+  push:
+    branches: [dev, feature/rdp-console]
+    paths:
+      - 'project/app/jetkvm/rdp-console/**'
+      - '.github/workflows/rdp-console.yml'
+  pull_request:
+    paths:
+      - 'project/app/jetkvm/rdp-console/**'
+      - '.github/workflows/rdp-console.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project/app/jetkvm/rdp-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.0'
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo check --locked || cargo check
+      - run: cargo clippy --all-targets -- -D warnings
+
+  armv7:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: project/app/jetkvm/rdp-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.0'
+          targets: armv7-unknown-linux-gnueabihf
+      - name: Install ARM linker
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-linux-gnueabihf
+      - name: Build ARMv7 hard-float daemon
+        env:
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+        run: cargo build --release --target armv7-unknown-linux-gnueabihf
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jetkvm-rdp-armv7
+          path: project/app/jetkvm/rdp-console/target/armv7-unknown-linux-gnueabihf/release/jetkvm-rdp
+          if-no-files-found: error

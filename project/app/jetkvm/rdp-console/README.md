@@ -38,13 +38,14 @@ Host check:
 cargo check
 ```
 
-ARMv7 hard-float build used by the firmware integration:
+The firmware uses a static ARMv7 hard-float musl binary so the daemon does not depend on the appliance's uClibc runtime:
 
 ```sh
-cargo build --release --target armv7-unknown-linux-gnueabihf
+cargo install cross --locked
+cross build --release --target armv7-unknown-linux-musleabihf
 ```
 
-The firmware Makefile automatically packages the resulting binary from the target directory, or accepts `JETKVM_RDP_BIN=/path/to/jetkvm-rdp`.
+The firmware Makefile automatically packages the resulting binary from that target directory, or accepts `JETKVM_RDP_BIN=/path/to/jetkvm-rdp`.
 
 ## First hardware test
 

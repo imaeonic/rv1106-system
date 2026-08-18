@@ -12,6 +12,10 @@ on:
       - '.github/workflows/rdp-console.yml'
   workflow_dispatch:
 
+concurrency:
+  group: rdp-console-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest

@@ -39,15 +39,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.0'
-          targets: armv7-unknown-linux-gnueabihf
-      - name: Install ARM linker
-        run: sudo apt-get update && sudo apt-get install -y gcc-arm-linux-gnueabihf
-      - name: Build ARMv7 hard-float daemon
-        env:
-          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
-        run: cargo build --release --target armv7-unknown-linux-gnueabihf
+          targets: armv7-unknown-linux-musleabihf
+      - name: Install cross
+        run: cargo install cross --locked
+      - name: Build static ARMv7 hard-float daemon
+        run: cross build --release --target armv7-unknown-linux-musleabihf
       - uses: actions/upload-artifact@v4
         with:
-          name: jetkvm-rdp-armv7
-          path: project/app/jetkvm/rdp-console/target/armv7-unknown-linux-gnueabihf/release/jetkvm-rdp
+          name: jetkvm-rdp-armv7-musl
+          path: project/app/jetkvm/rdp-console/target/armv7-unknown-linux-musleabihf/release/jetkvm-rdp
           if-no-files-found: error

@@ -12,7 +12,7 @@ CURRENT_DIR := $(shell pwd)
 PKG_NAME := jetkvm
 PKG_BIN ?= out
 PKG_BUILD ?= build
-JETKVM_RDP_BIN ?= $(CURRENT_DIR)/rdp-console/target/armv7-unknown-linux-gnueabihf/release/jetkvm-rdp
+JETKVM_RDP_BIN ?= $(CURRENT_DIR)/rdp-console/target/armv7-unknown-linux-musleabihf/release/jetkvm-rdp
 
 ifeq ($(PKG_BIN),)
 $(error ### $(CURRENT_DIR): PKG_BIN is NULL, Please Check !!!)

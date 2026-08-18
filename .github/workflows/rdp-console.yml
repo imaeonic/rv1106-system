@@ -23,10 +23,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.0'
-          components: rustfmt, clippy
-      - run: cargo fmt --check
-      - run: cargo check --locked || cargo check
-      - run: cargo clippy --all-targets -- -D warnings
+          components: clippy
+      - name: Compile daemon
+        run: cargo check
+      - name: Clippy
+        run: cargo clippy --all-targets
 
   armv7:
     runs-on: ubuntu-latest

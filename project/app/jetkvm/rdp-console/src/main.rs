@@ -7,7 +7,9 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use bytes::Bytes;
+use ironrdp_dvc::encode_dvc_messages;
 use ironrdp_displaycontrol::pdu::DisplayControlMonitorLayout;
+use ironrdp_svc::ChannelFlags;
 use ironrdp_egfx::pdu::{Avc420Region, CapabilitiesAdvertisePdu, CapabilitySet};
 use ironrdp_egfx::server::{GraphicsPipelineHandler, GraphicsPipelineServer};
 use ironrdp_server::tokio;
@@ -234,7 +236,17 @@ impl GfxShared {
             return;
         }
 
-        let messages = gfx.drain_output();
+        let Some(channel_id) = gfx.channel_id() else {
+            return;
+        };
+        let dvc_messages = gfx.drain_output();
+        let messages = match encode_dvc_messages(channel_id, dvc_messages, ChannelFlags::SHOW_PROTOCOL) {
+            Ok(messages) => messages,
+            Err(error) => {
+                warn!(?error, "failed to encode EGFX DVC messages");
+                return;
+            }
+        };
         drop(gfx);
         if !messages.is_empty() {
             let _ = sender.send(ServerEvent::Egfx(EgfxServerMessage::SendMessages { messages }));
@@ -604,7 +616,7 @@ async fn run_bridge_connection(stream: UnixStream, bridge: BridgeLink, gfx: GfxS
                     if width > 0 { state.width = width; }
                     if height > 0 { state.height = height; }
                     state.fps_milli = u32::from_le_bytes(payload[5..9].try_into().expect("4 bytes"));
-                    debug!(?*state, "JetKVM video state");
+                    debug!(state = ?state, "JetKVM video state");
                 }
                 MSG_VIDEO_FRAME => {
                     if payload.len() < 9 { continue; }
@@ -658,7 +670,11 @@ where
 
 fn setup_logging() -> Result<()> {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    tracing_subscriber::fmt().with_env_filter(filter).compact().try_init()?;
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .compact()
+        .try_init()
+        .map_err(|error| anyhow::anyhow!("failed to initialise tracing: {error}"))?;
     Ok(())
 }
 

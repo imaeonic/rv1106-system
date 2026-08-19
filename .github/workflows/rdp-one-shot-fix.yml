@@ -4,12 +4,16 @@ on:
   push:
     branches:
       - feature/rdp-console
+  pull_request:
+    branches:
+      - dev
 
 permissions:
   contents: write
 
 jobs:
   patch:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

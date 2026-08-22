@@ -3,12 +3,7 @@ permissions:
   contents: write
 
 on:
-  push:
-    paths-ignore:
-      - '.github/workflows/rdp-userland.yml'
-  pull_request:
-    paths-ignore:
-      - '.github/workflows/rdp-userland.yml'
+  workflow_dispatch:
 
 jobs:
   build:

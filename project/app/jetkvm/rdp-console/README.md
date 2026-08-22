@@ -67,7 +67,8 @@ small JSON feed consumed by the Developer Mode update control in the web UI.
 The UI reuses JetKVM's normal OTA confirmation, verification, progress and reboot flow.
 It requests the complete system component so `jetkvm_app`, `jetkvm-rdp` and their startup
 scripts always move together. Normal automatic updates are disabled after selecting this
-development channel.
+development channel. Each manual check cache-busts the moving GitHub feed so a replaced
+release asset cannot briefly offer an older development image from the CDN.
 
 ## Deliberate prototype limits
 

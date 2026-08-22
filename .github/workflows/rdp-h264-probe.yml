@@ -1,0 +1,52 @@
+name: RDP H264 Probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/rdp-h264-probe.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rdp-h264-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout RDP transport branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/rdp-console
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.0'
+          targets: armv7-unknown-linux-musleabihf
+
+      - name: Install Rust cross compiler wrapper
+        run: cargo install cross --locked
+
+      - name: Build static ARMv7 H264 probe
+        working-directory: project/app/jetkvm/rdp-console
+        run: cross build --release --target armv7-unknown-linux-musleabihf --bin h264-probe
+
+      - name: Stage probe
+        run: |
+          mkdir -p dist
+          cp project/app/jetkvm/rdp-console/target/armv7-unknown-linux-musleabihf/release/h264-probe dist/h264-probe
+          chmod 0755 dist/h264-probe
+          file dist/h264-probe
+          sha256sum dist/h264-probe > dist/h264-probe.sha256
+
+      - name: Upload probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: jetkvm-rdp-h264-probe
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7

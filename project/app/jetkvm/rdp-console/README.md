@@ -56,6 +56,17 @@ The firmware Makefile automatically packages the resulting binary from that targ
 5. Confirm live HDMI video, absolute mouse movement and keyboard input.
 6. Only after the standard 1080p path is proven, enable generated EDID/multimon experiments through the existing `DESKTOP_REQUEST` hook.
 
+## Development OTA channel
+
+Successful `feature/rdp-console` firmware builds publish an immutable prerelease containing
+the complete `jetkvm-v2` `update_ota.tar`. The `rdp-console-latest` prerelease carries the
+small JSON feed consumed by the Developer Mode update control in the web UI.
+
+The UI reuses JetKVM's normal OTA confirmation, verification, progress and reboot flow.
+It requests the complete system component so `jetkvm_app`, `jetkvm-rdp` and their startup
+scripts always move together. Normal automatic updates are disabled after selecting this
+development channel.
+
 ## Deliberate prototype limits
 
 - RDP security is basic/no-TLS during initial bring-up. Do not expose port 3389 to an untrusted network.

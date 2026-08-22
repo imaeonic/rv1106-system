@@ -7,21 +7,22 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use bytes::Bytes;
-use ironrdp_dvc::encode_dvc_messages;
 use ironrdp_displaycontrol::pdu::DisplayControlMonitorLayout;
-use ironrdp_svc::ChannelFlags;
+use ironrdp_dvc::encode_dvc_messages;
 use ironrdp_egfx::pdu::{Avc420Region, CapabilitiesAdvertisePdu, CapabilitySet};
 use ironrdp_egfx::server::{GraphicsPipelineHandler, GraphicsPipelineServer};
 use ironrdp_server::tokio;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::net::UnixStream;
-use tokio::sync::mpsc::{self, UnboundedSender};
-use tokio::time::{sleep, Duration};
 use ironrdp_server::{
     BitmapUpdate, DesktopSize, DisplayUpdate, EgfxServerMessage, GfxDvcBridge, GfxServerFactory,
     GfxServerHandle, KeyboardEvent, MouseEvent, PixelFormat, PostConnectionAction, RdpServer,
-    RdpServerDisplay, RdpServerDisplayUpdates, RdpServerInputHandler, ServerEvent, ServerEventSender,
+    RdpServerDisplay, RdpServerDisplayUpdates, RdpServerInputHandler, ServerEvent,
+    ServerEventSender,
 };
+use ironrdp_svc::ChannelFlags;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::net::UnixStream;
+use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::time::{Duration, sleep};
 use tracing::{debug, error, info, trace, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -175,7 +176,11 @@ impl GfxShared {
 
     fn set_handle(&self, handle: GfxServerHandle) {
         *self.inner.handle.lock().expect("gfx handle mutex poisoned") = Some(handle);
-        *self.inner.surface.lock().expect("gfx surface mutex poisoned") = None;
+        *self
+            .inner
+            .surface
+            .lock()
+            .expect("gfx surface mutex poisoned") = None;
     }
 
     fn set_sender(&self, sender: UnboundedSender<ServerEvent>) {
@@ -187,8 +192,18 @@ impl GfxShared {
             return;
         }
 
-        let handle = self.inner.handle.lock().expect("gfx handle mutex poisoned").clone();
-        let sender = self.inner.sender.lock().expect("gfx sender mutex poisoned").clone();
+        let handle = self
+            .inner
+            .handle
+            .lock()
+            .expect("gfx handle mutex poisoned")
+            .clone();
+        let sender = self
+            .inner
+            .sender
+            .lock()
+            .expect("gfx sender mutex poisoned")
+            .clone();
         let (Some(handle), Some(sender)) = (handle, sender) else {
             return;
         };
@@ -198,7 +213,11 @@ impl GfxShared {
             return;
         }
 
-        let current_surface = *self.inner.surface.lock().expect("gfx surface mutex poisoned");
+        let current_surface = *self
+            .inner
+            .surface
+            .lock()
+            .expect("gfx surface mutex poisoned");
         let surface_id = match current_surface {
             Some((id, width, height)) if width == frame.width && height == frame.height => id,
             old => {
@@ -215,14 +234,22 @@ impl GfxShared {
                 if !gfx.map_surface_to_output(id, 0, 0) {
                     return;
                 }
-                *self.inner.surface.lock().expect("gfx surface mutex poisoned") =
-                    Some((id, frame.width, frame.height));
+                *self
+                    .inner
+                    .surface
+                    .lock()
+                    .expect("gfx surface mutex poisoned") = Some((id, frame.width, frame.height));
                 id
             }
         };
 
         let regions = [Avc420Region::full_frame(frame.width, frame.height, 22)];
-        let timestamp_ms = self.inner.epoch.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
+        let timestamp_ms = self
+            .inner
+            .epoch
+            .elapsed()
+            .as_millis()
+            .min(u128::from(u32::MAX)) as u32;
         let queued = gfx
             .send_avc420_frame(surface_id, &frame.data, &regions, timestamp_ms)
             .is_some();
@@ -240,16 +267,19 @@ impl GfxShared {
             return;
         };
         let dvc_messages = gfx.drain_output();
-        let messages = match encode_dvc_messages(channel_id, dvc_messages, ChannelFlags::SHOW_PROTOCOL) {
-            Ok(messages) => messages,
-            Err(error) => {
-                warn!(?error, "failed to encode EGFX DVC messages");
-                return;
-            }
-        };
+        let messages =
+            match encode_dvc_messages(channel_id, dvc_messages, ChannelFlags::SHOW_PROTOCOL) {
+                Ok(messages) => messages,
+                Err(error) => {
+                    warn!(?error, "failed to encode EGFX DVC messages");
+                    return;
+                }
+            };
         drop(gfx);
         if !messages.is_empty() {
-            let _ = sender.send(ServerEvent::Egfx(EgfxServerMessage::SendMessages { messages }));
+            let _ = sender.send(ServerEvent::Egfx(EgfxServerMessage::SendMessages {
+                messages,
+            }));
         }
     }
 }
@@ -282,7 +312,9 @@ impl GfxServerFactory for JetKvmGfxFactory {
     }
 
     fn build_server_with_handle(&self) -> Option<(GfxDvcBridge, GfxServerHandle)> {
-        let handle = Arc::new(Mutex::new(GraphicsPipelineServer::new(Box::new(JetKvmGfxHandler))));
+        let handle = Arc::new(Mutex::new(GraphicsPipelineServer::new(Box::new(
+            JetKvmGfxHandler,
+        ))));
         self.shared.set_handle(handle.clone());
         Some((GfxDvcBridge::new(handle.clone()), handle))
     }
@@ -352,7 +384,10 @@ impl RdpServerInputHandler for InputHandler {
                 self.send_keyboard(&state);
             }
             KeyboardEvent::UnicodePressed(code) | KeyboardEvent::UnicodeReleased(code) => {
-                trace!(code, "Unicode RDP keyboard event ignored; mstsc normally sends scan codes");
+                trace!(
+                    code,
+                    "Unicode RDP keyboard event ignored; mstsc normally sends scan codes"
+                );
             }
             KeyboardEvent::Synchronize(flags) => {
                 trace!(?flags, "RDP keyboard synchronize");
@@ -389,7 +424,11 @@ impl RdpServerInputHandler for InputHandler {
             MouseEvent::RelMove { x, y } => {
                 let dx = x.clamp(i32::from(i8::MIN), i32::from(i8::MAX)) as i8;
                 let dy = y.clamp(i32::from(i8::MIN), i32::from(i8::MAX)) as i8;
-                let buttons = self.state.lock().expect("input state mutex poisoned").mouse_buttons;
+                let buttons = self
+                    .state
+                    .lock()
+                    .expect("input state mutex poisoned")
+                    .mouse_buttons;
                 self.bridge.rel_mouse(dx, dy, buttons);
             }
         }
@@ -401,7 +440,11 @@ fn wheel_units(value: i16) -> i8 {
         return 0;
     }
     let value = i32::from(value);
-    let steps = if value.unsigned_abs() >= 120 { value / 120 } else { value.signum() };
+    let steps = if value.unsigned_abs() >= 120 {
+        value / 120
+    } else {
+        value.signum()
+    };
     steps.clamp(i32::from(i8::MIN), i32::from(i8::MAX)) as i8
 }
 
@@ -452,22 +495,66 @@ fn scancode_to_hid(code: u8, extended: bool) -> Option<u8> {
     match code {
         0x01 => Some(0x29),
         0x02..=0x0b => Some(0x1e + ((code - 0x02) % 10)),
-        0x0c => Some(0x2d), 0x0d => Some(0x2e), 0x0e => Some(0x2a), 0x0f => Some(0x2b),
-        0x10 => Some(0x14), 0x11 => Some(0x1a), 0x12 => Some(0x08), 0x13 => Some(0x15),
-        0x14 => Some(0x17), 0x15 => Some(0x1c), 0x16 => Some(0x18), 0x17 => Some(0x0c),
-        0x18 => Some(0x12), 0x19 => Some(0x13), 0x1a => Some(0x2f), 0x1b => Some(0x30),
-        0x1c => Some(0x28), 0x1e => Some(0x04), 0x1f => Some(0x16), 0x20 => Some(0x07),
-        0x21 => Some(0x09), 0x22 => Some(0x0a), 0x23 => Some(0x0b), 0x24 => Some(0x0d),
-        0x25 => Some(0x0e), 0x26 => Some(0x0f), 0x27 => Some(0x33), 0x28 => Some(0x34),
-        0x29 => Some(0x35), 0x2b => Some(0x31), 0x2c => Some(0x1d), 0x2d => Some(0x1b),
-        0x2e => Some(0x06), 0x2f => Some(0x19), 0x30 => Some(0x05), 0x31 => Some(0x11),
-        0x32 => Some(0x10), 0x33 => Some(0x36), 0x34 => Some(0x37), 0x35 => Some(0x38),
-        0x37 => Some(0x55), 0x39 => Some(0x2c), 0x3a => Some(0x39),
+        0x0c => Some(0x2d),
+        0x0d => Some(0x2e),
+        0x0e => Some(0x2a),
+        0x0f => Some(0x2b),
+        0x10 => Some(0x14),
+        0x11 => Some(0x1a),
+        0x12 => Some(0x08),
+        0x13 => Some(0x15),
+        0x14 => Some(0x17),
+        0x15 => Some(0x1c),
+        0x16 => Some(0x18),
+        0x17 => Some(0x0c),
+        0x18 => Some(0x12),
+        0x19 => Some(0x13),
+        0x1a => Some(0x2f),
+        0x1b => Some(0x30),
+        0x1c => Some(0x28),
+        0x1e => Some(0x04),
+        0x1f => Some(0x16),
+        0x20 => Some(0x07),
+        0x21 => Some(0x09),
+        0x22 => Some(0x0a),
+        0x23 => Some(0x0b),
+        0x24 => Some(0x0d),
+        0x25 => Some(0x0e),
+        0x26 => Some(0x0f),
+        0x27 => Some(0x33),
+        0x28 => Some(0x34),
+        0x29 => Some(0x35),
+        0x2b => Some(0x31),
+        0x2c => Some(0x1d),
+        0x2d => Some(0x1b),
+        0x2e => Some(0x06),
+        0x2f => Some(0x19),
+        0x30 => Some(0x05),
+        0x31 => Some(0x11),
+        0x32 => Some(0x10),
+        0x33 => Some(0x36),
+        0x34 => Some(0x37),
+        0x35 => Some(0x38),
+        0x37 => Some(0x55),
+        0x39 => Some(0x2c),
+        0x3a => Some(0x39),
         0x3b..=0x44 => Some(0x3a + (code - 0x3b)),
-        0x45 => Some(0x53), 0x46 => Some(0x47), 0x47 => Some(0x5f), 0x48 => Some(0x60),
-        0x49 => Some(0x61), 0x4a => Some(0x56), 0x4b => Some(0x5c), 0x4c => Some(0x5d),
-        0x4d => Some(0x5e), 0x4e => Some(0x57), 0x4f => Some(0x59), 0x50 => Some(0x5a),
-        0x51 => Some(0x5b), 0x52 => Some(0x62), 0x53 => Some(0x63), 0x57 => Some(0x44),
+        0x45 => Some(0x53),
+        0x46 => Some(0x47),
+        0x47 => Some(0x5f),
+        0x48 => Some(0x60),
+        0x49 => Some(0x61),
+        0x4a => Some(0x56),
+        0x4b => Some(0x5c),
+        0x4c => Some(0x5d),
+        0x4d => Some(0x5e),
+        0x4e => Some(0x57),
+        0x4f => Some(0x59),
+        0x50 => Some(0x5a),
+        0x51 => Some(0x5b),
+        0x52 => Some(0x62),
+        0x53 => Some(0x63),
+        0x57 => Some(0x44),
         0x58 => Some(0x45),
         _ => None,
     }
@@ -494,7 +581,11 @@ impl RdpServerDisplayUpdates for DisplayUpdates {
             for y in 0..64usize {
                 for x in 0..64usize {
                     let offset = (y * 64 + x) * 4;
-                    let value = if ((x / 8) + (y / 8)) % 2 == 0 { 0x24 } else { 0x38 };
+                    let value = if ((x / 8) + (y / 8)) % 2 == 0 {
+                        0x24
+                    } else {
+                        0x38
+                    };
                     data[offset] = value;
                     data[offset + 1] = value;
                     data[offset + 2] = value;
@@ -569,7 +660,8 @@ async fn bridge_supervisor(socket_path: String, bridge: BridgeLink, gfx: GfxShar
         match UnixStream::connect(&socket_path).await {
             Ok(stream) => {
                 info!(path = %socket_path, "connected to JetKVM local bridge");
-                if let Err(error) = run_bridge_connection(stream, bridge.clone(), gfx.clone()).await {
+                if let Err(error) = run_bridge_connection(stream, bridge.clone(), gfx.clone()).await
+                {
                     warn!(%error, "JetKVM local bridge connection ended");
                 }
                 bridge.set_tx(None);
@@ -580,7 +672,11 @@ async fn bridge_supervisor(socket_path: String, bridge: BridgeLink, gfx: GfxShar
     }
 }
 
-async fn run_bridge_connection(stream: UnixStream, bridge: BridgeLink, gfx: GfxShared) -> Result<()> {
+async fn run_bridge_connection(
+    stream: UnixStream,
+    bridge: BridgeLink,
+    gfx: GfxShared,
+) -> Result<()> {
     let (mut reader, mut writer) = stream.into_split();
     let (tx, mut rx) = mpsc::unbounded_channel::<BridgeMessage>();
     bridge.set_tx(Some(tx));
@@ -645,12 +741,18 @@ where
     R: AsyncRead + Unpin,
 {
     let typ = reader.read_u8().await.context("read bridge message type")?;
-    let length = reader.read_u32_le().await.context("read bridge message length")? as usize;
+    let length = reader
+        .read_u32_le()
+        .await
+        .context("read bridge message length")? as usize;
     if length > MAX_MESSAGE {
         anyhow::bail!("bridge message too large: {length}");
     }
     let mut payload = vec![0u8; length];
-    reader.read_exact(&mut payload).await.context("read bridge message payload")?;
+    reader
+        .read_exact(&mut payload)
+        .await
+        .context("read bridge message payload")?;
     Ok((typ, payload))
 }
 
@@ -693,7 +795,9 @@ async fn main() -> Result<()> {
     tokio::spawn(bridge_supervisor(socket, bridge.clone(), gfx.clone()));
 
     let input = InputHandler::new(bridge.clone());
-    let display = DisplayHandler { bridge: bridge.clone() };
+    let display = DisplayHandler {
+        bridge: bridge.clone(),
+    };
     let gfx_factory = JetKvmGfxFactory { shared: gfx };
 
     let mut server = RdpServer::builder()

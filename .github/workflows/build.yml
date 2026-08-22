@@ -4,7 +4,11 @@ permissions:
 
 on:
   push:
+    paths-ignore:
+      - '.github/workflows/rdp-userland.yml'
   pull_request:
+    paths-ignore:
+      - '.github/workflows/rdp-userland.yml'
 
 jobs:
   build:

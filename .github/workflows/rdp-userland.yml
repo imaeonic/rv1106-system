@@ -1,0 +1,90 @@
+name: RDP Userland Bundle
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rdp-userland-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout RDP transport branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/rdp-console
+
+      - name: Checkout RDP-enabled JetKVM app
+        uses: actions/checkout@v4
+        with:
+          repository: imaeonic/jetkvm
+          ref: feature/rdp-console
+          path: _rdp-app
+
+      - name: Prepare JetKVM app build context
+        working-directory: _rdp-app
+        run: ./scripts/ci_helper.sh prepare
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.DOCKER_BUILD_CONTEXT_DIR }}
+          file: ${{ env.DOCKER_BUILD_CONTEXT_DIR }}/Dockerfile.build
+          tags: ${{ env.DOCKER_BUILD_TAG }}
+          push: false
+          load: true
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '^1.25.1'
+
+      - name: Build RDP-enabled JetKVM app and embedded UI
+        working-directory: _rdp-app
+        run: ./scripts/ci_helper.sh make build_dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.0'
+          targets: armv7-unknown-linux-musleabihf
+
+      - name: Install Rust cross compiler wrapper
+        run: cargo install cross --locked
+
+      - name: Build static ARMv7 RDP transport
+        working-directory: project/app/jetkvm/rdp-console
+        run: cross build --release --target armv7-unknown-linux-musleabihf
+
+      - name: Assemble userdata deployment bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIST="$GITHUB_WORKSPACE/dist/jetkvm-rdp-userland"
+          mkdir -p "$DIST"
+
+          cp _rdp-app/bin/jetkvm_app "$DIST/jetkvm_app.update"
+          cp project/app/jetkvm/rdp-console/target/armv7-unknown-linux-musleabihf/release/jetkvm-rdp "$DIST/jetkvm-rdp"
+          cp project/app/jetkvm/rdp-console/deploy/S90jetkvm-rdp "$DIST/S90jetkvm-rdp"
+          cp project/app/jetkvm/rdp-console/deploy/install.sh "$DIST/install.sh"
+          cp project/app/jetkvm/rdp-console/deploy/rollback-app.sh "$DIST/rollback-app.sh"
+
+          chmod 0755 "$DIST"/*
+          file "$DIST/jetkvm_app.update"
+          file "$DIST/jetkvm-rdp"
+          tar -C "$GITHUB_WORKSPACE/dist" -czf "$GITHUB_WORKSPACE/dist/jetkvm-rdp-userland.tar.gz" jetkvm-rdp-userland
+
+      - name: Upload deployment bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: jetkvm-rdp-userland
+          path: |
+            dist/jetkvm-rdp-userland/
+            dist/jetkvm-rdp-userland.tar.gz
+          if-no-files-found: error
+          retention-days: 14

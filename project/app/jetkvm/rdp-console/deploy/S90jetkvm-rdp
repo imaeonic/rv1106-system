@@ -17,9 +17,13 @@ start_rdp() {
         return 0
     fi
 
-    if [ -f "$RDP_PID" ] && kill -0 "$(cat "$RDP_PID")" 2>/dev/null; then
-        echo "jetkvm-rdp already running"
-        return 0
+    if [ -f "$RDP_PID" ]; then
+        old_pid="$(cat "$RDP_PID")"
+        if kill -0 "$old_pid" 2>/dev/null; then
+            echo "jetkvm-rdp already running"
+            return 0
+        fi
+        rm -f "$RDP_PID"
     fi
 
     (
@@ -34,7 +38,6 @@ start_rdp() {
             exit 1
         fi
 
-        echo $$ > "$RDP_PID"
         exec env \
             JETKVM_RDP_BIND="${JETKVM_RDP_BIND:-0.0.0.0:3389}" \
             JETKVM_RDP_SOCKET="$RDP_SOCKET" \
@@ -42,6 +45,7 @@ start_rdp() {
             "$RDP_BIN" >> "$RDP_LOG" 2>&1
     ) &
 
+    echo $! > "$RDP_PID"
     echo "jetkvm-rdp startup scheduled"
 }
 

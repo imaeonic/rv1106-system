@@ -61,9 +61,9 @@ jobs:
       - name: Install Rust cross compiler wrapper
         run: cargo install cross --locked
 
-      - name: Build static ARMv7 RDP transport
+      - name: Build static ARMv7 RDP transport and H264 probe
         working-directory: project/app/jetkvm/rdp-console
-        run: cross build --release --target armv7-unknown-linux-musleabihf
+        run: cross build --release --target armv7-unknown-linux-musleabihf --bins
 
       - name: Assemble userdata deployment bundle
         shell: bash
@@ -74,6 +74,7 @@ jobs:
 
           cp _rdp-app/bin/jetkvm_app "$DIST/jetkvm_app.update"
           cp project/app/jetkvm/rdp-console/target/armv7-unknown-linux-musleabihf/release/jetkvm-rdp "$DIST/jetkvm-rdp"
+          cp project/app/jetkvm/rdp-console/target/armv7-unknown-linux-musleabihf/release/h264-probe "$DIST/h264-probe"
           cp project/app/jetkvm/rdp-console/deploy/S90jetkvm-rdp "$DIST/S90jetkvm-rdp"
           cp project/app/jetkvm/rdp-console/deploy/install.sh "$DIST/install.sh"
           cp project/app/jetkvm/rdp-console/deploy/rollback-app.sh "$DIST/rollback-app.sh"
@@ -81,6 +82,7 @@ jobs:
           chmod 0755 "$DIST"/*
           file "$DIST/jetkvm_app.update"
           file "$DIST/jetkvm-rdp"
+          file "$DIST/h264-probe"
           tar -C "$GITHUB_WORKSPACE/dist" -czf "$GITHUB_WORKSPACE/dist/jetkvm-rdp-userland.tar.gz" jetkvm-rdp-userland
 
       - name: Upload deployment bundle

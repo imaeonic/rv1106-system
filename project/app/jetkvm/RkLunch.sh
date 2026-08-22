@@ -65,7 +65,9 @@ start_rdp_console()
 {
 	RDP_BIN=/userdata/jetkvm/bin/jetkvm-rdp
 	RDP_SOCKET=${JETKVM_RDP_SOCKET:-/run/jetkvm-rdp.sock}
+	RDP_ENABLE_FILE=/userdata/jetkvm/rdp.enable
 	[ ! -x "$RDP_BIN" ] && return 0
+	[ ! -f "$RDP_ENABLE_FILE" ] && return 0
 
 	(
 		# Do not listen on 3389 until jetkvm_app has initialised the native
@@ -75,14 +77,19 @@ start_rdp_console()
 			sleep .2
 		done
 
-		while true; do
+		restarts=0
+		while [ "$restarts" -lt 3 ]; do
 			JETKVM_RDP_BIND=${JETKVM_RDP_BIND:-0.0.0.0:3389} \
 			JETKVM_RDP_SOCKET="$RDP_SOCKET" \
 			RUST_LOG=${RUST_LOG:-info} \
 			"$RDP_BIN" >> /userdata/jetkvm/rdp.log 2>&1
-			echo "jetkvm-rdp exited; restarting in 2 seconds" >> /userdata/jetkvm/rdp.log
-			sleep 2
+			restarts=$((restarts + 1))
+			echo "jetkvm-rdp exited; restart $restarts of 3 in 5 seconds" >> /userdata/jetkvm/rdp.log
+			sleep 5
 		done
+		if [ "$restarts" -ge 3 ]; then
+			echo "jetkvm-rdp restart limit reached; leaving web console available" >> /userdata/jetkvm/rdp.log
+		fi
 	) &
 }
 

@@ -50,11 +50,13 @@ The firmware Makefile automatically packages the resulting binary from that targ
 ## First hardware test
 
 1. Boot a development JetKVM build containing both modified `jetkvm_app` and `jetkvm-rdp`.
-2. Confirm `/userdata/jetkvm/rdp.log` reports port 3389 listening and the Unix bridge handshake.
-3. Connect HDMI and USB to a test target.
-4. From Windows, run `mstsc /v:<jetkvm-ip>`.
-5. Confirm live HDMI video, absolute mouse movement and keyboard input.
-6. Only after the standard 1080p path is proven, enable generated EDID/multimon experiments through the existing `DESKTOP_REQUEST` hook.
+2. Confirm the normal web console and SSH are healthy with RDP disabled by default.
+3. Enable **RDP Console** under **Advanced → Developer Mode**, then reboot.
+4. Confirm `/userdata/jetkvm/rdp.log` reports port 3389 listening and the Unix bridge handshake.
+5. Connect HDMI and USB to a test target.
+6. From Windows, run `mstsc /v:<jetkvm-ip>`.
+7. Confirm live HDMI video, absolute mouse movement and keyboard input.
+8. Only after the standard 1080p path is proven, enable generated EDID/multimon experiments through the existing `DESKTOP_REQUEST` hook.
 
 ## Development OTA channel
 

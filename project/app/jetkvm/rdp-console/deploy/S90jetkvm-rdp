@@ -1,0 +1,80 @@
+#!/bin/sh
+
+RDP_BIN=/userdata/jetkvm/bin/jetkvm-rdp
+RDP_SOCKET=${JETKVM_RDP_SOCKET:-/run/jetkvm-rdp.sock}
+RDP_ENABLE_FILE=/userdata/jetkvm/rdp.enable
+RDP_LOG=/userdata/jetkvm/rdp.log
+RDP_PID=/run/jetkvm-rdp.pid
+
+start_rdp() {
+    if [ ! -x "$RDP_BIN" ]; then
+        echo "jetkvm-rdp not installed"
+        return 0
+    fi
+
+    if [ ! -f "$RDP_ENABLE_FILE" ]; then
+        echo "jetkvm-rdp disabled"
+        return 0
+    fi
+
+    if [ -f "$RDP_PID" ]; then
+        old_pid="$(cat "$RDP_PID")"
+        if kill -0 "$old_pid" 2>/dev/null; then
+            echo "jetkvm-rdp already running"
+            return 0
+        fi
+        rm -f "$RDP_PID"
+    fi
+
+    (
+        attempts=0
+        while [ ! -S "$RDP_SOCKET" ] && [ "$attempts" -lt 60 ]; do
+            attempts=$((attempts + 1))
+            sleep 1
+        done
+
+        if [ ! -S "$RDP_SOCKET" ]; then
+            echo "jetkvm-rdp: bridge socket did not appear after 60 seconds" >> "$RDP_LOG"
+            exit 1
+        fi
+
+        exec env \
+            JETKVM_RDP_BIND="${JETKVM_RDP_BIND:-0.0.0.0:3389}" \
+            JETKVM_RDP_SOCKET="$RDP_SOCKET" \
+            RUST_LOG="${RUST_LOG:-info}" \
+            "$RDP_BIN" >> "$RDP_LOG" 2>&1
+    ) &
+
+    echo $! > "$RDP_PID"
+    echo "jetkvm-rdp startup scheduled"
+}
+
+stop_rdp() {
+    if [ -f "$RDP_PID" ]; then
+        pid="$(cat "$RDP_PID")"
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+        fi
+        rm -f "$RDP_PID"
+    fi
+
+    killall jetkvm-rdp 2>/dev/null || true
+    echo "jetkvm-rdp stopped"
+}
+
+case "$1" in
+    start)
+        start_rdp
+        ;;
+    stop)
+        stop_rdp
+        ;;
+    restart)
+        stop_rdp
+        start_rdp
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac

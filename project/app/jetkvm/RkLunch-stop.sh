@@ -3,13 +3,9 @@
 rcK()
 {
 	for i in $(ls /oem/usr/etc/init.d/S??*) ;do
-
-		# Ignore dangling symlinks (if any).
 		[ ! -f "$i" ] && continue
-
 		case "$i" in
 			*.sh)
-				# Source shell script for speed.
 				(
 					trap - INT QUIT TSTP
 					set stop
@@ -17,20 +13,15 @@ rcK()
 				)
 				;;
 			*)
-				# No sh extension, so fork subprocess.
 				$i stop
 				;;
 		esac
 	done
 
 	for i in /userdata/init.d/S??*;do
-
-		# Ignore dangling symlinks (if any).
 		[ ! -f "$i" ] && continue
-
 		case "$i" in
 			*.sh)
-				# Source shell script for speed.
 				(
 					trap - INT QUIT TSTP
 					set stop
@@ -38,7 +29,6 @@ rcK()
 				)
 				;;
 			*)
-				# No sh extension, so fork subprocess.
 				$i stop
 				;;
 		esac
@@ -46,6 +36,7 @@ rcK()
 }
 
 echo "Stop Application ..."
+killall jetkvm-rdp 2>/dev/null || true
 killall jetkvm_app
 killall udhcpc
 

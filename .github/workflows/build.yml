@@ -6,6 +6,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: prototype-firmware-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -19,8 +23,16 @@ jobs:
             sku: jetkvm-v2-sdmmc
     name: Build (${{ matrix.board }})
     steps:
-      - name: Checkout
+      - name: Checkout firmware
         uses: actions/checkout@v4
+
+      - name: Checkout RDP-enabled JetKVM app
+        uses: actions/checkout@v4
+        with:
+          repository: imaeonic/jetkvm
+          ref: feature/rdp-console
+          path: _rdp-app
+
       - name: Set up build dependencies
         run: |
           sudo apt-get update &&
@@ -30,27 +42,60 @@ jobs:
             gperf g++-multilib gcc-multilib \
             libnl-3-dev libdbus-1-dev libelf-dev libmpc-dev dwarves \
             zip
+
+      - name: Prepare JetKVM app build context
+        working-directory: _rdp-app
+        run: ./scripts/ci_helper.sh prepare
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.DOCKER_BUILD_CONTEXT_DIR }}
+          file: ${{ env.DOCKER_BUILD_CONTEXT_DIR }}/Dockerfile.build
+          tags: ${{ env.DOCKER_BUILD_TAG }}
+          push: false
+          load: true
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '^1.25.1'
+      - name: Build RDP-enabled jetkvm_app
+        working-directory: _rdp-app
+        run: ./scripts/ci_helper.sh make build_dev SKIP_UI_BUILD=1
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.0'
+          targets: armv7-unknown-linux-musleabihf
+      - name: Install Rust cross compiler wrapper
+        run: cargo install cross --locked
+      - name: Build static RDP transport
+        working-directory: project/app/jetkvm/rdp-console
+        run: cross build --release --target armv7-unknown-linux-musleabihf
+
+      - name: Install prototype application binary
+        run: |
+          install -m 0755 _rdp-app/bin/jetkvm_app project/app/jetkvm/jetkvm/bin/jetkvm_app
+          file _rdp-app/bin/jetkvm_app
+          file project/app/jetkvm/rdp-console/target/armv7-unknown-linux-musleabihf/release/jetkvm-rdp
+
       - name: Get build version
         run: |
           export BUILD_VERSION=$(cat VERSION)
           export BUILD_VERSION_SOURCE="file"
-          # For non-main branches, append branch name and timestamp
           if [ "$GITHUB_REF" != "refs/heads/main" ]; then
             export BUILD_VERSION="$BUILD_VERSION-$(echo $GITHUB_REF | sed 's/refs\/heads\///' | sed 's/\//-/')$(date +%Y%m%d%H%M)"
             export BUILD_VERSION_SOURCE="branch"
           fi
-
           echo "BUILD_VERSION=$BUILD_VERSION" >> $GITHUB_ENV
           echo "BUILD_VERSION_SOURCE=$BUILD_VERSION_SOURCE" >> $GITHUB_ENV
           echo "$BUILD_VERSION" > VERSION
-      - name: Update jetkvm_app
-        run: ./update_app.sh "${{ matrix.sku }}"
-      - name: Build
+
+      - name: Build complete RDP prototype firmware
         run: |
           echo "Version: $BUILD_VERSION (from $BUILD_VERSION_SOURCE)"
-
+          export JETKVM_RDP_BIN="$GITHUB_WORKSPACE/project/app/jetkvm/rdp-console/target/armv7-unknown-linux-musleabihf/release/jetkvm-rdp"
           ./build.sh lunch BoardConfig_IPC/BoardConfig-${{ matrix.board }}-NONE-RV1106_JETKVM_V2.mk
           ./build.sh
+
       - name: Upload OTA image
         uses: actions/upload-artifact@v4
         with:
@@ -74,8 +119,7 @@ jobs:
           compression-level: 0
       - name: Create compressed buildkit
         if: matrix.board == 'EMMC'
-        run: |
-          ./make_buildkit.sh
+        run: ./make_buildkit.sh
       - name: Upload buildkit
         if: matrix.board == 'EMMC'
         uses: actions/upload-artifact@v4

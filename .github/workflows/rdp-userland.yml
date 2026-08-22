@@ -2,6 +2,10 @@ name: RDP Userland Bundle
 
 on:
   workflow_dispatch:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/rdp-userland.yml'
 
 permissions:
   contents: read

@@ -1,0 +1,70 @@
+name: RDP App Probe Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/rdp-app-probe.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rdp-app-probe-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout build helper repository
+        uses: actions/checkout@v4
+
+      - name: Checkout RDP-enabled JetKVM app
+        uses: actions/checkout@v4
+        with:
+          repository: imaeonic/jetkvm
+          ref: feature/rdp-console
+          path: _rdp-app
+
+      - name: Prepare JetKVM app build context
+        working-directory: _rdp-app
+        run: ./scripts/ci_helper.sh prepare
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.DOCKER_BUILD_CONTEXT_DIR }}
+          file: ${{ env.DOCKER_BUILD_CONTEXT_DIR }}/Dockerfile.build
+          tags: ${{ env.DOCKER_BUILD_TAG }}
+          push: false
+          load: true
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '^1.25.1'
+
+      - name: Build RDP-enabled JetKVM app and embedded UI
+        working-directory: _rdp-app
+        run: ./scripts/ci_helper.sh make build_dev
+
+      - name: Assemble app-only diagnostic artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp _rdp-app/bin/jetkvm_app dist/jetkvm_app.update
+          chmod 0755 dist/jetkvm_app.update
+          sha256sum dist/jetkvm_app.update > dist/SHA256SUMS.txt
+          file dist/jetkvm_app.update
+
+      - name: Upload app-only diagnostic artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jetkvm-rdp-app-probe
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7

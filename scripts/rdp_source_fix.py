@@ -29,31 +29,8 @@ if 'use ironrdp_dvc::encode_dvc_messages;' not in text:
     assert old in text, "Rust import insertion point not found"
     text = text.replace(old, new, 1)
 
-old = 'use ironrdp_egfx::pdu::{Avc420Region, CapabilitiesAdvertisePdu, CapabilitySet};'
-new = 'use ironrdp_egfx::pdu::{annex_b_to_avc, Avc420Region, CapabilitiesAdvertisePdu, CapabilitySet};'
-if 'annex_b_to_avc' not in text:
-    assert old in text, "AVC converter import insertion point not found"
-    text = text.replace(old, new, 1)
-
-old = '''        let queued = gfx
-            .send_avc420_frame(surface_id, &frame.data, &regions, timestamp_ms)
-            .is_some();
-'''
-new = '''        // JetKVM's native encoder emits Annex-B start-code-prefixed NAL units.
-        // MS-RDPEGFX AVC420 carries AVC/AVCC length-prefixed NAL units, so convert
-        // each complete native frame before handing it to IronRDP.
-        let avc_data = annex_b_to_avc(&frame.data);
-        if avc_data.is_empty() {
-            warn!(input_bytes = frame.data.len(), "Annex-B to AVC conversion produced an empty frame");
-            return;
-        }
-        let queued = gfx
-            .send_avc420_frame(surface_id, &avc_data, &regions, timestamp_ms)
-            .is_some();
-'''
-if 'let avc_data = annex_b_to_avc(&frame.data);' not in text:
-    assert old in text, "AVC frame submission block not found"
-    text = text.replace(old, new, 1)
+# MS-RDPEGFX AVC420 requires the H.264 Annex-B byte-stream format. JetKVM
+# already emits Annex-B, so pass the native frame through unchanged.
 
 old = '''        let messages = gfx.drain_output();
         drop(gfx);
@@ -79,6 +56,100 @@ new = '''        let Some(channel_id) = gfx.channel_id() else {
 '''
 if 'let dvc_messages = gfx.drain_output();' not in text:
     assert old in text, "EGFX output block not found"
+    text = text.replace(old, new, 1)
+
+# Do not start the native encoder when the TCP connection is merely accepted.
+# EGFX negotiation takes hundreds of milliseconds, and starting here causes the
+# initial SPS/PPS/IDR frame to be dropped before the graphics pipeline is ready.
+old = '''struct JetKvmGfxHandler;
+
+impl GraphicsPipelineHandler for JetKvmGfxHandler {
+    fn capabilities_advertise(&mut self, pdu: &CapabilitiesAdvertisePdu) {
+        debug!(?pdu, "RDP client advertised EGFX capabilities");
+    }
+
+    fn on_ready(&mut self, negotiated: &CapabilitySet) {
+        info!(?negotiated, "RDP EGFX pipeline ready");
+    }
+}
+
+struct JetKvmGfxFactory {
+    shared: GfxShared,
+}
+'''
+new = '''struct JetKvmGfxHandler {
+    bridge: BridgeLink,
+}
+
+impl GraphicsPipelineHandler for JetKvmGfxHandler {
+    fn capabilities_advertise(&mut self, pdu: &CapabilitiesAdvertisePdu) {
+        debug!(?pdu, "RDP client advertised EGFX capabilities");
+    }
+
+    fn on_ready(&mut self, negotiated: &CapabilitySet) {
+        info!(?negotiated, "RDP EGFX pipeline ready");
+        info!("requesting JetKVM video after EGFX became ready");
+        self.bridge.start_video();
+    }
+}
+
+struct JetKvmGfxFactory {
+    shared: GfxShared,
+    bridge: BridgeLink,
+}
+'''
+if 'requesting JetKVM video after EGFX became ready' not in text:
+    assert old in text, "EGFX handler block not found"
+    text = text.replace(old, new, 1)
+
+old = '''    fn build_gfx_handler(&self) -> Box<dyn GraphicsPipelineHandler> {
+        Box::new(JetKvmGfxHandler)
+    }
+
+    fn build_server_with_handle(&self) -> Option<(GfxDvcBridge, GfxServerHandle)> {
+        let handle = Arc::new(Mutex::new(GraphicsPipelineServer::new(Box::new(
+            JetKvmGfxHandler,
+        ))));
+'''
+new = '''    fn build_gfx_handler(&self) -> Box<dyn GraphicsPipelineHandler> {
+        Box::new(JetKvmGfxHandler {
+            bridge: self.bridge.clone(),
+        })
+    }
+
+    fn build_server_with_handle(&self) -> Option<(GfxDvcBridge, GfxServerHandle)> {
+        let handle = Arc::new(Mutex::new(GraphicsPipelineServer::new(Box::new(
+            JetKvmGfxHandler {
+                bridge: self.bridge.clone(),
+            },
+        ))));
+'''
+if 'bridge: self.bridge.clone(),' not in text:
+    assert old in text, "EGFX factory handler construction block not found"
+    text = text.replace(old, new, 1)
+
+old = '''    fn on_accept(&mut self, peer: SocketAddr) -> bool {
+        info!(%peer, "RDP client connected");
+        self.bridge.start_video();
+        true
+    }
+'''
+new = '''    fn on_accept(&mut self, peer: SocketAddr) -> bool {
+        info!(%peer, "RDP client connected");
+        true
+    }
+'''
+if 'self.bridge.start_video();\n        true' in text:
+    assert old in text, "RDP on_accept block not found"
+    text = text.replace(old, new, 1)
+
+old = '    let gfx_factory = JetKvmGfxFactory { shared: gfx };'
+new = '''    let gfx_factory = JetKvmGfxFactory {
+        shared: gfx,
+        bridge: bridge.clone(),
+    };'''
+if 'bridge: bridge.clone(),' not in text:
+    assert old in text, "EGFX factory construction point not found"
     text = text.replace(old, new, 1)
 
 old = '                    debug!(?*state, "JetKVM video state");'

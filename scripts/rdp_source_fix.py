@@ -148,7 +148,9 @@ new = '''    let gfx_factory = JetKvmGfxFactory {
         shared: gfx,
         bridge: bridge.clone(),
     };'''
-if 'bridge: bridge.clone(),' not in text:
+# Be specific here: `bridge: bridge.clone(),` already appears in the unrelated
+# DisplayHandler initializer in the original source.
+if 'let gfx_factory = JetKvmGfxFactory {\n        shared: gfx,\n        bridge: bridge.clone(),\n    };' not in text:
     assert old in text, "EGFX factory construction point not found"
     text = text.replace(old, new, 1)
 

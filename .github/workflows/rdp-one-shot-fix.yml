@@ -47,6 +47,25 @@ jobs:
               assert old in text, "Rust import insertion point not found"
               text = text.replace(old, new, 1)
 
+          old = 'use ironrdp_egfx::pdu::{Avc420Region, CapabilitiesAdvertisePdu, CapabilitySet};'
+          new = 'use ironrdp_egfx::pdu::{annex_b_to_avc, Avc420Region, CapabilitiesAdvertisePdu, CapabilitySet};'
+          if 'annex_b_to_avc' not in text:
+              assert old in text, "AVC converter import insertion point not found"
+              text = text.replace(old, new, 1)
+
+          old = '''        let queued = gfx
+            .send_avc420_frame(surface_id, &frame.data, &regions, timestamp_ms)
+            .is_some();
+'''
+          new = '''        let avc_data = annex_b_to_avc(&frame.data);
+        let queued = gfx
+            .send_avc420_frame(surface_id, &avc_data, &regions, timestamp_ms)
+            .is_some();
+'''
+          if 'let avc_data = annex_b_to_avc(&frame.data);' not in text:
+              assert old in text, "AVC frame submission block not found"
+              text = text.replace(old, new, 1)
+
           old = '''        let messages = gfx.drain_output();
         drop(gfx);
         if !messages.is_empty() {
@@ -100,5 +119,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add project/app/jetkvm/rdp-console/Cargo.toml project/app/jetkvm/rdp-console/src/main.rs
-          git commit -m "fix: compile RDP console against pinned IronRDP"
+          git commit -m "fix: convert JetKVM Annex-B H264 to AVC for RDP"
           git push origin HEAD:feature/rdp-console

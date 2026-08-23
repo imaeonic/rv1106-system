@@ -59,8 +59,9 @@ if 'let dvc_messages = gfx.drain_output();' not in text:
     text = text.replace(old, new, 1)
 
 # Do not start the native encoder when the TCP connection is merely accepted.
-# EGFX negotiation takes hundreds of milliseconds, and starting here causes the
-# initial SPS/PPS/IDR frame to be dropped before the graphics pipeline is ready.
+# Start only after EGFX negotiation, then allow a short settle interval so the
+# CapabilitiesConfirm can reach mstsc before the first SPS/PPS/IDR and surface
+# PDUs are queued. Trace logging proved this ordering race by making video work.
 old = '''struct JetKvmGfxHandler;
 
 impl GraphicsPipelineHandler for JetKvmGfxHandler {
@@ -88,8 +89,12 @@ impl GraphicsPipelineHandler for JetKvmGfxHandler {
 
     fn on_ready(&mut self, negotiated: &CapabilitySet) {
         info!(?negotiated, "RDP EGFX pipeline ready");
-        info!("requesting JetKVM video after EGFX became ready");
-        self.bridge.start_video();
+        let bridge = self.bridge.clone();
+        tokio::spawn(async move {
+            sleep(Duration::from_millis(150)).await;
+            info!("requesting JetKVM video after EGFX settle delay");
+            bridge.start_video();
+        });
     }
 }
 
@@ -98,7 +103,7 @@ struct JetKvmGfxFactory {
     bridge: BridgeLink,
 }
 '''
-if 'requesting JetKVM video after EGFX became ready' not in text:
+if 'requesting JetKVM video after EGFX settle delay' not in text:
     assert old in text, "EGFX handler block not found"
     text = text.replace(old, new, 1)
 
